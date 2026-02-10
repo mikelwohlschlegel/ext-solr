@@ -114,6 +114,44 @@ abstract class IntegrationTestBase extends FunctionalTestCase
         $this->previousErrorHandler = $this->failWhenSolrDeprecationIsCreated();
     }
 
+    /**
+     * Override to automatically normalize tx_solr_indexqueue_item records after import.
+     * This ensures that records with changed=0 get a valid timestamp, which is required
+     * by the Item constructor validation.
+     */
+    public function importCSVDataSet(string $path): void
+    {
+        parent::importCSVDataSet($path);
+        $this->normalizeImportedRecordsTimestamps();
+    }
+
+    /**
+     * Normalizes records that have tstamp=0 by setting a valid timestamp.
+     *
+     * This is needed because the Index-Queue-Item constructor requires
+     * changed > 0 for data integrity validation.
+     *
+     * All records observed by Index-Queue-Item must have the tstamp.
+     *
+     * Note: All tstamp default values in fake extensions ext_tables.sql are set to 1007007007
+     *
+     * @throws DBALException
+     */
+    protected function normalizeImportedRecordsTimestamps(): void
+    {
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tx_solr_indexqueue_item');
+        $connection->update(
+            'tx_solr_indexqueue_item',
+            ['changed' => 1007007007],
+            ['changed' => 0],
+        );
+        $connection->update(
+            'pages',
+            ['tstamp' => 1007007007],
+            ['tstamp' => 0],
+        );
+    }
+
     protected function tearDown(): void
     {
         set_error_handler($this->previousErrorHandler);
@@ -484,6 +522,7 @@ abstract class IntegrationTestBase extends FunctionalTestCase
             'item_type' => 'pages',
             'item_uid' => $pageId,
             'indexing_configuration' => 'pages',
+            'changed' => 1007007007,
         ];
         $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tx_solr_indexqueue_item');
         // Check if item (type + Page ID) is already in index, if so update it
